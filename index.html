@@ -20,7 +20,7 @@ kref.meaning {
 	padding-left: 10px;
 	color:#006621;
 	background-position: left 6px;
-	background-image: url('images/Icon_6_7.png');
+	background-image: url('images/dot.jpg');
 	background-repeat: no-repeat;
 }
 
@@ -38,13 +38,8 @@ kref.exe {
 	height: 600px;
 	background-color:#eeeeee;
 }
-.column-dict2{ 
-	float: right; 
-	width: 42%;
-	height: 600px;
-	overflow:scroll;
-}
-.column-dict1{
+
+.column-dict{
 	display: inline-block;
 	width: 42%;
 	height: 600px;
@@ -60,15 +55,21 @@ kref.exe {
 
 <body>
 	<div id="container">
-		<div id="area1"></div>
 		<div class="column-search">
 			<input type="search" id="txt_word" placeholder="Search..." onkeypress="onKeyPress(event)">
 			<button onclick="onBtnSearchClick()">Search</button>
-			<p>
-				<input type="checkbox" id="cbmulti" onclick="fnUpdateLayout()"> Multi-dictionary<br>
-			</p>
 		</div>
-		<div id="area2"></div>
+		<div id="area1" class="column-dict">
+			<select id="optDict1" onChange="onChangeOptDict(this)">
+				<option value="en-en">English-English</option>
+				<option value="en-vi">English-Vietnamese</option>
+				<option value="jp-vi">Japanese-Vietnamese</option>
+				<option value="vi-en">Vietnamese-English</option>
+				<option value="vi-jp">Vietnamese-Japanese</option>
+			</select>
+			<p id="dict_info">N/A</p>
+			<p id="txt_trans1">Word not found</p>		
+		</div>		
 	</div>
 	<script type="text/javascript">
 		var dict_list= {};
@@ -85,17 +86,18 @@ kref.exe {
 			if(type=="vi-jp" || type=="jp-vi") {
 				urls[2] = "dic/"+type+"/"+dict_list[type]+".dict";
 			}
+			console.log(urls);
 			return urls;
 		}
 
 		var file_array1 = [];
 		//load files at Server side using AJAX
-		function onLoadDict(dict_id,type) {
+		function onInitDict(type) {
 			var dict_urls = fnGetDictURLs(type);
 			var nRequest = new Array();
 			var STATUS_OK = 200; //OK
 				RS_REQF_RESR = 4; //request finished and response is ready
-			for (var i=0; i<3; i++){
+			for (var i=0; i<dict_urls.length; i++){
 				(function(i) {
 						nRequest[i] = new XMLHttpRequest();
 						nRequest[i].open("GET", dict_urls[i], true);
@@ -108,7 +110,7 @@ kref.exe {
 								file_array1.push(blob);
 								if(file_array1.length==3) {
 									console.log(file_array1);
-									onUploadDictEx(dict_id);
+									onLoadDict();
 								}
 							} else {
 								console.log("Error", nRequest[i].statusText);
@@ -119,61 +121,24 @@ kref.exe {
 				})(i);
 			}
 		}
-
-		function onInit() {
-			var area1 = document.getElementById("area1");
-			area1.setAttribute("class", "column-dict1");
-			area1.innerHTML = ''+
-					'<select id="optDict1" onChange="onChangeOptDict(0,this)">'+
-					'  <option value="en-en">English-English</option>'+
-					'  <option value="en-vi">English-Vietnamese</option>'+
-					'  <option value="jp-vi">Japanese-Vietnamese</option>'+
-					'  <option value="vi-en">Vietnamese-English</option>'+
-					'  <option value="vi-jp">Vietnamese-Japanese</option>'+
-					'</select>'+
-					'<p class="dict_info">N/A</p>'+
-					'<p id="txt_trans1" class="trans_content">Word not found</p>';
-		}
-		function onChangeOptDict(id,ob) {
+		function onChangeOptDict(ob) {
 			var type = ob.value;
-			onLoadDict(id,type);
+			onInitDict(type);
 		}
-		function fnUpdateLayout(is_multi) {
-			var elem = document.getElementById("area2");
-			if(document.getElementById("cbmulti").checked) {
-				elem.setAttribute("class", "column-dict2");
-				elem.innerHTML = ''+
-						'<select id="optDict2" onChange="onChangeOptDict(1,this)">'+
-						'  <option value="en-en">English-English</option>'+
-						'  <option value="en-vi">English-Vietnamese</option>'+
-						'  <option value="jp-vi">Japanese-Vietnamese</option>'+
-						'  <option value="vi-en">Vietnamese-English</option>'+
-						'  <option value="vi-jp">Vietnamese-Japanese</option>'+
-						'</select>'+
-						'<p class="dict_info">N/A</p>'+
-						'<p id="txt_trans2" class="trans_content">Word not found</p>';
-			} else {
-				elem.setAttribute("class", "");
-				elem.innerHTML="";
-			}
-		}
-		onInit();
-		fnUpdateLayout(false);
-		onLoadDict(0,"en-en");
+		onInitDict("en-en");
 	</script>
 	<script type="text/javascript">
-		var lookup_tbls = [];
-		var dicts = [];
+		var lookup_tbl = {};
+		var dict;
 
-		function fnSearch(id) {
+		function fnSearch() {
 			console.log("Processing fnSearch...");
-			console.log(id);
-			if(typeof dicts[id] == "undefined" || typeof lookup_tbls[id] == "undefined") return;
-			var trans_content = document.getElementsByClassName("trans_content")[id];
+			if(typeof dict == "undefined" || typeof lookup_tbl == "undefined") return;
+			var trans_content = document.getElementById("txt_trans1");
 			var x = document.getElementById("txt_word").value;
-			var idx_obj = lookup_tbls[id][x];
+			var idx_obj = lookup_tbl[x];
 			if(typeof idx_obj != "undefined") {
-				dicts[id].entry(idx_obj.dictpos)
+				dict.entry(idx_obj.dictpos)
 				.then(function(entry) {
 					console.log(entry);
 					var trans = fnProcessTrans(entry);
@@ -187,24 +152,18 @@ kref.exe {
 
 		function onBtnSearchClick() {
 			console.log("Processing onBtnSearchClick...");
-			console.log(dicts.length);
-			for(var i=0; i<dicts.length; i++) {
-				fnSearch(i);
-			}
+			fnSearch();
 		}
 
 		function onKeyPress(e) {
 			console.log("Processing onKeyPress...");
 			if (e.keyCode === 13) {
-				console.log(dicts.length);
-				for(var i=0; i<dicts.length; i++) {
-					fnSearch(i);
-				}
+				fnSearch();
 			}
 		}
 
-		function onUploadDictEx(id) {
-			var dict = new StarDict();
+		function onLoadDict() {
+			dict = new StarDict();
 			dict.load(file_array1).then(function() {
 				return dict.index({
 					"include_offset" : true,
@@ -214,13 +173,10 @@ kref.exe {
 			}, function(err) {
 				console.error("StarDict error: " + err.message);
 			}).then(function(idx) {
-				var lookup_idx = {};
 				for (var i = 0, len = idx.length; i < len; i++) {
-					lookup_idx[idx[i].term] = idx[i];
+					lookup_tbl[idx[i].term] = idx[i];
 				}
-				dicts[id] = dict;
-				lookup_tbls[id] = lookup_idx;
-				document.getElementsByClassName("dict_info")[id].innerText = dict.keyword("bookname");
+				document.getElementById("dict_info").innerText = dict.keyword("bookname");
 			});
 		}
 
