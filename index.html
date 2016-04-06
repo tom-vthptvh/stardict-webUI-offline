@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<meta charset="utf-8">
+<head>
+<style>
+body {
+	font-size: 13px;
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-weight: normal;
+}
+h3,kref {
+	color:#0077CC;
+}
+kref.type {
+	color: Black;
+	font-weight: bold;
+	text-decoration: underline;
+}
+kref.meaning {
+	padding-left: 10px;
+	color:#006621;
+	background-position: left 6px;
+	background-image: url('images/Icon_6_7.png');
+	background-repeat: no-repeat;
+}
+
+kref.ex, ex {
+	padding-left:20px;
+	color: #808080;
+}
+kref.exe {
+	padding-left:20px;
+}
+.column-search { 
+	padding-top:10px;
+	float: left;
+	width: 16%;
+	height: 600px;
+	background-color:#eeeeee;
+}
+.column-dict2{ 
+	float: right; 
+	width: 42%;
+	height: 600px;
+	overflow:scroll;
+}
+.column-dict1{
+	display: inline-block;
+	width: 42%;
+	height: 600px;
+	overflow:scroll;
+}
+</style>
+<title>Offline Dictionary</title>
+
+<script src="stardict.js" type="text/javascript"></script>
+<script src="dictzip.js" type="text/javascript"></script>
+<script src="pako_inflate.js" type="text/javascript"></script>
+</head>
+
+<body>
+	<div id="container">
+		<div id="area1"></div>
+		<div class="column-search">
+			<input type="search" id="txt_word" placeholder="Search..." onkeypress="onKeyPress(event)">
+			<button onclick="onBtnSearchClick()">Search</button>
+			<p>
+				<input type="checkbox" id="cbmulti" onclick="fnUpdateLayout()"> Multi-dictionary<br>
+			</p>
+		</div>
+		<div id="area2"></div>
+	</div>
+	<script type="text/javascript">
+		var dict_list= {};
+		dict_list["en-en"]="Merriam-Webster_s_Advanced_Learner_s_Dictionary";
+		dict_list["en-vi"]="star_anhviet";
+		dict_list["jp-vi"]="star_nhatviet";
+		dict_list["vi-en"]="star_vietanh";
+		dict_list["vi-jp"]="star_vietnhat";
+		function fnGetDictURLs(type) {
+			var urls = new Array();
+			urls[0] = "dic/"+type+"/"+dict_list[type]+".ifo";
+			urls[1] = "dic/"+type+"/"+dict_list[type]+".idx";
+			urls[2] = "dic/"+type+"/"+dict_list[type]+".dict.dz";
+			if(type=="vi-jp" || type=="jp-vi") {
+				urls[2] = "dic/"+type+"/"+dict_list[type]+".dict";
+			}
+			return urls;
+		}
+
+		var file_array1 = [];
+		//load files at Server side using AJAX
+		function onLoadDict(dict_id,type) {
+			var dict_urls = fnGetDictURLs(type);
+			var nRequest = new Array();
+			var STATUS_OK = 200; //OK
+				RS_REQF_RESR = 4; //request finished and response is ready
+			for (var i=0; i<3; i++){
+				(function(i) {
+						nRequest[i] = new XMLHttpRequest();
+						nRequest[i].open("GET", dict_urls[i], true);
+						nRequest[i].responseType = "arraybuffer";
+						nRequest[i].onreadystatechange = function (oEvent) {
+						if (nRequest[i].readyState == RS_REQF_RESR) {
+							if (nRequest[i].status == STATUS_OK/*OK*/) {
+								var blob = new Blob([nRequest[i].response], {type: dict_urls[i]});
+								console.log(blob);
+								file_array1.push(blob);
+								if(file_array1.length==3) {
+									console.log(file_array1);
+									onUploadDictEx(dict_id);
+								}
+							} else {
+								console.log("Error", nRequest[i].statusText);
+							}
+						}
+					};
+					nRequest[i].send();
+				})(i);
+			}
+		}
+
+		function onInit() {
+			var area1 = document.getElementById("area1");
+			area1.setAttribute("class", "column-dict1");
+			area1.innerHTML = ''+
+					'<select id="optDict1" onChange="onChangeOptDict(0,this)">'+
+					'  <option value="en-en">English-English</option>'+
+					'  <option value="en-vi">English-Vietnamese</option>'+
+					'  <option value="jp-vi">Japanese-Vietnamese</option>'+
+					'  <option value="vi-en">Vietnamese-English</option>'+
+					'  <option value="vi-jp">Vietnamese-Japanese</option>'+
+					'</select>'+
+					'<p class="dict_info">N/A</p>'+
+					'<p id="txt_trans1" class="trans_content">Word not found</p>';
+		}
+		function onChangeOptDict(id,ob) {
+			var type = ob.value;
+			onLoadDict(id,type);
+		}
+		function fnUpdateLayout(is_multi) {
+			var elem = document.getElementById("area2");
+			if(document.getElementById("cbmulti").checked) {
+				elem.setAttribute("class", "column-dict2");
+				elem.innerHTML = ''+
+						'<select id="optDict2" onChange="onChangeOptDict(1,this)">'+
+						'  <option value="en-en">English-English</option>'+
+						'  <option value="en-vi">English-Vietnamese</option>'+
+						'  <option value="jp-vi">Japanese-Vietnamese</option>'+
+						'  <option value="vi-en">Vietnamese-English</option>'+
+						'  <option value="vi-jp">Vietnamese-Japanese</option>'+
+						'</select>'+
+						'<p class="dict_info">N/A</p>'+
+						'<p id="txt_trans2" class="trans_content">Word not found</p>';
+			} else {
+				elem.setAttribute("class", "");
+				elem.innerHTML="";
+			}
+		}
+		onInit();
+		fnUpdateLayout(false);
+		onLoadDict(0,"en-en");
+	</script>
+	<script type="text/javascript">
+		var lookup_tbls = [];
+		var dicts = [];
+
+		function fnSearch(id) {
+			console.log("Processing fnSearch...");
+			console.log(id);
+			if(typeof dicts[id] == "undefined" || typeof lookup_tbls[id] == "undefined") return;
+			var trans_content = document.getElementsByClassName("trans_content")[id];
+			var x = document.getElementById("txt_word").value;
+			var idx_obj = lookup_tbls[id][x];
+			if(typeof idx_obj != "undefined") {
+				dicts[id].entry(idx_obj.dictpos)
+				.then(function(entry) {
+					console.log(entry);
+					var trans = fnProcessTrans(entry);
+					trans_content.innerHTML = trans;
+				}, function(err) {
+					console.error("StarDict error: " + err.message);
+					}
+				);
+			}
+		}
+
+		function onBtnSearchClick() {
+			console.log("Processing onBtnSearchClick...");
+			console.log(dicts.length);
+			for(var i=0; i<dicts.length; i++) {
+				fnSearch(i);
+			}
+		}
+
+		function onKeyPress(e) {
+			console.log("Processing onKeyPress...");
+			if (e.keyCode === 13) {
+				console.log(dicts.length);
+				for(var i=0; i<dicts.length; i++) {
+					fnSearch(i);
+				}
+			}
+		}
+
+		function onUploadDictEx(id) {
+			var dict = new StarDict();
+			dict.load(file_array1).then(function() {
+				return dict.index({
+					"include_offset" : true,
+					"include_dictpos" : true,
+					"include_term" : true
+				});
+			}, function(err) {
+				console.error("StarDict error: " + err.message);
+			}).then(function(idx) {
+				var lookup_idx = {};
+				for (var i = 0, len = idx.length; i < len; i++) {
+					lookup_idx[idx[i].term] = idx[i];
+				}
+				dicts[id] = dict;
+				lookup_tbls[id] = lookup_idx;
+				document.getElementsByClassName("dict_info")[id].innerText = dict.keyword("bookname");
+			});
+		}
+
+		function fnProcessTrans(trans) {
+			var div = document.createElement("div");
+			div.innerHTML = trans.replace(/<k>/g,"@|h3|@")
+								 .replace(/<[/]k>/g,"@|/h3|@")
+								 .replace(/<i>/g,"@|i|@")
+								 .replace(/<[/]i>/g,"@|/i|@")
+								 .replace(/<b>/g,"@|b|@")
+								 .replace(/<[/]b>/g,"@|/b|@")
+								 .replace(/<kref>/g,"@|kref|@")
+								 .replace(/<[/]kref>/g,"@|/kref|@")
+								 .replace(/<ex>/g,"@|ex|@")
+								 .replace(/<[/]ex>/g,"@|/ex|@");
+			return div.innerText.replace(/\n/g,"</kref><br>")
+								.replace(/@[|]/g, "<")
+								.replace(/[|]@/g, ">")
+								//en-en
+								.replace(/<b>([1-9]+)/g,"<kref class='meaning'><b>$1")
+								.replace(/\u2014\s(\w+)/g,"<kref class='meaning'>$1")
+								//en-vi,vi-en
+								.replace(/@(\w+)/g, "<kref>@$1")
+								.replace(/[*][\s]+(\w+)/g, "<br><kref class='type'>$1")
+								.replace(/-[\s]+([(]|\w+)/g, "<kref class='meaning'>$1")
+								.replace(/[+][\s]*(\w+)/g, "<br><kref class='ex'>$1")
+								.replace(/=(\w+)/g, "<kref class='exe'>$1")
+								//jp-en,en-jp
+								.replace(/-\s{(\w+)/g,"<kref>- {$1")
+								.replace(/(\w+)}\s/g,"$1} </kref>")
+								.replace(/(\w+)}<br>/g,"$1} </kref><br>");
+		}
+	</script>
+</body>
+</html>
+
